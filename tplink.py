@@ -40,25 +40,32 @@ class TpLinkRouter:
         requests.get(self.urlbase, headers={'Content-Type': 'application/json'})
         r = requests.post(self.urlbase, json={"method": "do", "login": {"password": security_encode(password)}})
         if r.status_code != 200:
-            raise NotAuthorized()
+            raise NotAuthorized(r.content)
         
         j = load_json(r.content)
         if j.get('error_code') != 0:
-            raise NotAuthorized()
+            raise NotAuthorized(r.content)
             
         self.stok = j['stok']
         self.ds = self.urlbase + 'stok=' + self.stok + '/ds'
         
+    def req(self, data):
+        r = requests.post(self.ds, json=data)
+        return load_json(r.content)
+        
     def set_wireless(self, enable, band='2g'):
         band = band.lower()
         assert band in ['2g', '5g']
-        d = {"wireless":{"wlan_host_" + band:{"enable":1 if enable else 0}},"method":"set"}
-        r = requests.post(self.ds, json=d)
-        return load_json(r.content)['error_code'] == 0
+        return self.req({"wireless":{"wlan_host_" + band:{"enable":1 if enable else 0}},"method":"set"})['error_code'] == 0
         
     def reboot(self):
-        r = requests.post(self.ds, json={"system":{"reboot":None},"method":"do"})
-        return load_json(r.content)['error_code'] == 0
+        return self.req(self.ds, json={"system":{"reboot":None},"method":"do"})['error_code'] == 0
+        
+    def status(self):
+        return self.req({"network":{"name":["wan_status","lan_status"]},"method":"get"})
+        
+    def get_wireless(self):
+        return self.req({"wireless":{"name":["wlan_host_2g","wlan_host_5g"]},"method":"get"})
         
 
 if __name__ == '__main__':
@@ -69,16 +76,20 @@ if __name__ == '__main__':
     actions = []
     
     for s in sys.argv[1:]:
-        cmd, arg = s.split('=') if '=' in s else (s, '')
+        cmd, arg = s.split('=', 1) if '=' in s else (s, '')
         if cmd == 'ip': ip = arg
         elif cmd == 'pwd': password = arg 
         elif cmd == '5g' or cmd == '2g':
             arg = [['off', 'on'].index(arg), cmd]
             actions.append(('set_wireless', arg))
-        elif cmd == 'reboot':
+        elif cmd in ('reboot', 'status', 'get_wireless'):
             actions.append((cmd, []))
     
     router = TpLinkRouter(ip)
     router.login(password)
     for action, action_arg in actions:
-        print('Success' if getattr(router, action)(*action_arg) else 'Failure')
+        res = getattr(router, action)(*action_arg)
+        if isinstance(res, dict):
+            print(res)
+        else:
+            print('Success' if res else 'Failure')
