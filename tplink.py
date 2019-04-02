@@ -59,7 +59,7 @@ class TpLinkRouter:
         return self.req({"wireless":{"wlan_host_" + band:{"enable":1 if enable else 0}},"method":"set"})['error_code'] == 0
         
     def reboot(self):
-        return self.req(self.ds, json={"system":{"reboot":None},"method":"do"})['error_code'] == 0
+        return self.req({"system":{"reboot":None},"method":"do"})['error_code'] == 0
         
     def status(self):
         return self.req({"network":{"name":["wan_status","lan_status"]},"method":"get"})
